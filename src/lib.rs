@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader},
+    io::{self, BufRead, BufReader, Write},
 };
 
 #[derive(Debug, Parser)]
@@ -25,10 +25,32 @@ pub fn get_args() -> Result<Args> {
 pub fn run(args: Args) -> Result<()> {
     let mut file = open(&args.in_file).map_err(|err| anyhow!("{}: {err}", args.in_file))?;
     let mut buf = String::new();
+    let mut previous = String::new();
+    let mut count = 0;
+    let mut out_file: Box<dyn Write> = match &args.out_file {
+        Some(filename) => Box::new(File::create(filename)?),
+        _ => Box::new(io::stdout()),
+    };
+    let mut print = |count: u64, text: &str| -> Result<()> {
+        if count > 0 {
+            if args.count {
+                write!(out_file, "{count:>4} {text}")?;
+            } else {
+                write!(out_file, "{text}")?;
+            }
+        }
+        Ok(())
+    };
     while file.read_line(&mut buf)? > 0 {
-        print!("{buf}");
+        if buf.trim_end() != previous.trim_end() {
+            print(count, &previous)?;
+            previous = buf.clone();
+            count = 0;
+        }
+        count += 1;
         buf.clear();
     }
+    print(count, &previous)?;
     Ok(())
 }
 
